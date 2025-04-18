@@ -1,0 +1,210 @@
+import streamlit as st
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def simulate_fifo(ref_str, num_frames):
+    frames = []
+    queue = []
+    page_faults = 0
+    fault_history = []
+    step_details = []
+
+    for i, page in enumerate(ref_str):
+        status = "Hit" if page in frames else "Fault"
+        if page not in frames:
+            page_faults += 1
+            if len(frames) < num_frames:
+                frames.append(page)
+                queue.append(page)
+            else:
+                victim = queue.pop(0)
+                idx = frames.index(victim)
+                frames[idx] = page
+                queue.append(page)
+        step_details.append({"Step": i + 1, "Page": page, "Frames": list(frames), "Status": status})
+        fault_history.append(page_faults)
+
+    return page_faults, fault_history, step_details
+
+def simulate_lru(ref_str, num_frames):
+    frames = []
+    last_used = {}
+    page_faults = 0
+    fault_history = []
+    step_details = []
+    time = 0
+
+    for i, page in enumerate(ref_str):
+        time += 1
+        status = "Hit" if page in frames else "Fault"
+        if page not in frames:
+            page_faults += 1
+            if len(frames) < num_frames:
+                frames.append(page)
+            else:
+                lru_page = min(frames, key=lambda p: last_used.get(p, 0))
+                idx = frames.index(lru_page)
+                frames[idx] = page
+        last_used[page] = time
+        step_details.append({"Step": i + 1, "Page": page, "Frames": list(frames), "Status": status})
+        fault_history.append(page_faults)
+
+    return page_faults, fault_history, step_details
+
+def simulate_optimal(ref_str, num_frames):
+    frames = []
+    page_faults = 0
+    fault_history = []
+    step_details = []
+
+    for i, page in enumerate(ref_str):
+        status = "Hit" if page in frames else "Fault"
+        if page not in frames:
+            page_faults += 1
+            if len(frames) < num_frames:
+                frames.append(page)
+            else:
+                future_uses = {}
+                for p in frames:
+                    try:
+                        next_idx = ref_str.index(p, i + 1)
+                    except ValueError:
+                        next_idx = float('inf')
+                    future_uses[p] = next_idx
+                victim = max(future_uses, key=future_uses.get)
+                idx = frames.index(victim)
+                frames[idx] = page
+        step_details.append({"Step": i + 1, "Page": page, "Frames": list(frames), "Status": status})
+        fault_history.append(page_faults)
+
+    return page_faults, fault_history, step_details
+
+def run_single_algorithm(ref_str, num_frames, algorithm):
+    if algorithm == "FIFO":
+        return simulate_fifo(ref_str, num_frames)
+    elif algorithm == "LRU":
+        return simulate_lru(ref_str, num_frames)
+    elif algorithm == "Optimal":
+        return simulate_optimal(ref_str, num_frames)
+    elif algorithm == "Compare All":
+        results = run_simulation(ref_str, frames)
+        st.subheader("📊 Simulation Results")
+        result_data = []
+        for alg, (faults, _, _) in results.items():
+            rate = faults / total_requests
+            result_data.append({"Algorithm": alg, "Page Faults": faults, "Fault Rate": f"{rate:.2f}"})
+        df = pd.DataFrame(result_data)
+        st.dataframe(df.set_index("Algorithm"))
+        fig1, fig2 = plot_results(results, ref_str)
+        st.pyplot(fig1)
+        st.pyplot(fig2)
+
+    else:
+        raise ValueError("Invalid algorithm")
+
+def run_simulation(ref_str, num_frames):
+    results = {}
+    for alg in ["FIFO", "LRU", "Optimal"]:
+        faults, history, steps = run_single_algorithm(ref_str, num_frames,alg)
+        results[alg] = (faults, history, steps)
+    return results
+
+def plot_results(results, ref_str):
+    algorithms = list(results.keys())
+    total_faults = [results[alg][0] for alg in algorithms]
+
+    fig1, ax1 = plt.subplots()
+    ax1.bar(algorithms, total_faults, color=['#FFB347', '#87CEEB', '#90EE90'])
+    ax1.set_title('Total Page Faults Comparison')
+    ax1.set_ylabel('Total Page Faults')
+    ax1.set_xlabel('Algorithm')
+
+    fig2, ax2 = plt.subplots()
+    steps = list(range(1, len(ref_str) + 1))
+    for alg in algorithms:
+        _, history, _ = results[alg]
+        ax2.plot(steps, history, label=alg)
+    ax2.set_title('Cumulative Page Faults Over Time')
+    ax2.set_xlabel('Step')
+    ax2.set_ylabel('Cumulative Page Faults')
+    ax2.legend()
+
+    return fig1, fig2
+
+# Streamlit UI
+st.set_page_config(page_title="Page Replacement Simulator", layout="centered")
+st.title("📄 Page Replacement Algorithm Simulator")
+st.markdown("""
+This simulator compares the performance of three page replacement algorithms:
+- **FIFO** (First-In, First-Out)
+- **LRU** (Least Recently Used)
+- **Optimal** (Belady's Optimal Algorithm)
+""")
+
+ref_input = st.text_input("Enter reference string (space-separated):", "7 0 1 2 0 3 0 4 2 3 0 3 2")
+frames = st.slider("Select number of frames:", min_value=1, max_value=10, value=3)
+algorithm = st.selectbox("Choose algorithm to simulate:", ["FIFO", "LRU", "Optimal", "Compare All"])
+
+if st.button("Run Simulation"):
+    try:
+        ref_str = ref_input.strip().split()
+        total_requests = len(ref_str)
+
+        if algorithm == "Compare All":
+            results = run_simulation(ref_str, frames)
+            st.subheader("📊 Simulation Results")
+            result_data = []
+            for alg, (faults, _, _) in results.items():
+                rate = faults / total_requests
+                result_data.append({"Algorithm": alg, "Page Faults": faults, "Fault Rate": f"{rate:.2f}"})
+            df = pd.DataFrame(result_data)
+            st.dataframe(df.set_index("Algorithm"))
+            fig1, fig2 = plot_results(results, ref_str)
+            st.pyplot(fig1)
+            st.pyplot(fig2)
+        else:
+            faults, history, steps = run_single_algorithm(ref_str, frames, algorithm)
+            st.subheader(f"📈 {algorithm} Results")
+            st.write(f"**Total Page Faults**: {faults}")
+            st.write(f"**Fault Rate**: {faults / total_requests:.2f}")
+
+            # Step-by-step display in custom box
+            with st.expander("📋 Step-by-Step Details", expanded=True):
+                for step in steps:
+                    step_num = step["Step"]
+                    page = step["Page"]
+                    status = step["Status"]
+                    frame_content = step["Frames"]
+
+                    st.markdown(f"""
+                    <div style="border:2px solid #ccc; border-radius:10px; padding:10px; margin-bottom:10px; background-color:#f9f9f9;">
+                        <b>Step {step_num}</b><br>
+                        <b>Page:</b> {page} &nbsp;&nbsp;
+                        <b>Status:</b> <span style="color:{'green' if status == 'Hit' else 'red'};">{status}</span><br>
+                        <b>Frames:</b> {' | '.join(map(str, frame_content))}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Line chart for selected algorithm
+            fig, ax = plt.subplots()
+            ax.plot(range(1, len(history)+1), history, label=algorithm, color='purple')
+            ax.set_title(f'Cumulative Page Faults - {algorithm}')
+            ax.set_xlabel('Step')
+            ax.set_ylabel('Cumulative Page Faults')
+            ax.legend()
+            st.pyplot(fig)
+
+            # Pie chart for Page Fault vs Hit
+            page_hits = total_requests - faults
+            labels = ['Page Faults', 'Page Hits']
+            sizes = [faults, page_hits]
+            colors = ['#FF6B6B', '#4CAF50']
+
+            fig_pie, ax_pie = plt.subplots()
+            ax_pie.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+            ax_pie.axis('equal')
+            ax_pie.set_title(f'{algorithm} - Fault vs Hit Distribution')
+            st.pyplot(fig_pie)
+
+    except Exception as e:
+        st.error(f"Error: {e}")
