@@ -131,7 +131,6 @@ def plot_results(results, ref_str):
 
     return fig1, fig2
 
-# Streamlit UI
 st.set_page_config(page_title="Page Replacement Simulator", layout="centered")
 st.title("📄 Page Replacement Algorithm Simulator")
 st.markdown("""
@@ -168,7 +167,6 @@ if st.button("Run Simulation"):
             st.write(f"**Total Page Faults**: {faults}")
             st.write(f"**Fault Rate**: {faults / total_requests:.2f}")
 
-            # Step-by-step display in custom box
             with st.expander("📋 Step-by-Step Details", expanded=True):
                 for step in steps:
                     step_num = step["Step"]
@@ -185,7 +183,6 @@ if st.button("Run Simulation"):
                     </div>
                     """, unsafe_allow_html=True)
 
-            # Line chart for selected algorithm
             fig, ax = plt.subplots()
             ax.plot(range(1, len(history)+1), history, label=algorithm, color='purple')
             ax.set_title(f'Cumulative Page Faults - {algorithm}')
@@ -194,7 +191,6 @@ if st.button("Run Simulation"):
             ax.legend()
             st.pyplot(fig)
 
-            # Pie chart for Page Fault vs Hit
             page_hits = total_requests - faults
             labels = ['Page Faults', 'Page Hits']
             sizes = [faults, page_hits]
